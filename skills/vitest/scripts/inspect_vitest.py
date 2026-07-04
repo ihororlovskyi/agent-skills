@@ -3,13 +3,12 @@
 Inspect a JavaScript/TypeScript project for Vitest conventions.
 
 Usage:
-    python scripts/inspect_vitest.py --root .
-    python scripts/inspect_vitest.py --root ../my-app --json
+    python <skill>/scripts/inspect_vitest.py --root .
+    python <skill>/scripts/inspect_vitest.py --root ../my-app --json
 """
 
 import argparse
 import json
-import os
 from pathlib import Path
 
 
@@ -25,23 +24,49 @@ LOCKFILES = [
 CONFIG_FILES = [
     "vitest.config.ts",
     "vitest.config.mts",
+    "vitest.config.cts",
     "vitest.config.js",
     "vitest.config.mjs",
+    "vitest.config.cjs",
     "vite.config.ts",
     "vite.config.mts",
+    "vite.config.cts",
     "vite.config.js",
     "vite.config.mjs",
+    "vite.config.cjs",
+]
+
+PROJECT_FILES = [
+    "vitest.workspace.ts",
+    "vitest.workspace.mts",
+    "vitest.workspace.js",
+    "vitest.workspace.mjs",
+    "vitest.workspace.cjs",
+    "vitest.projects.ts",
+    "vitest.projects.mts",
+    "vitest.projects.js",
+    "vitest.projects.mjs",
+    "vitest.projects.cjs",
+    "vitest.projects.json",
 ]
 
 TEST_GLOBS = [
     "**/*.test.ts",
     "**/*.test.tsx",
+    "**/*.test.mts",
+    "**/*.test.cts",
     "**/*.test.js",
     "**/*.test.jsx",
+    "**/*.test.mjs",
+    "**/*.test.cjs",
     "**/*.spec.ts",
     "**/*.spec.tsx",
+    "**/*.spec.mts",
+    "**/*.spec.cts",
     "**/*.spec.js",
     "**/*.spec.jsx",
+    "**/*.spec.mjs",
+    "**/*.spec.cjs",
 ]
 
 IGNORE_PARTS = {"node_modules", "dist", "build", "coverage", ".git", ".next", ".nuxt", ".output"}
@@ -54,14 +79,31 @@ def read_json(path):
         return None
 
 
-def detect_package_manager(root):
+def package_manager_field(package_json):
+    value = package_json.get("packageManager") if package_json else None
+    if not isinstance(value, str):
+        return None
+    manager = value.split("@", 1)[0]
+    return manager if manager in {"npm", "pnpm", "yarn", "bun"} else None
+
+
+def detect_package_manager(root, package_json=None):
+    lockfile_managers = []
     for filename, manager in LOCKFILES:
-        if (root / filename).exists():
-            return manager
+        if (root / filename).exists() and manager not in lockfile_managers:
+            lockfile_managers.append(manager)
+    if len(lockfile_managers) == 1:
+        return lockfile_managers[0]
+
+    declared_manager = package_manager_field(package_json)
+    if declared_manager:
+        return declared_manager
+    if lockfile_managers:
+        return lockfile_managers[0]
     return "npm"
 
 
-def package_command(manager, script_name=None):
+def package_command(root, manager, script_name=None):
     if script_name:
         if manager == "npm":
             return f"npm run {script_name} --"
@@ -71,15 +113,11 @@ def package_command(manager, script_name=None):
             return f"pnpm {script_name}"
         if manager == "bun":
             return f"bun run {script_name}"
-    if manager == "npm":
-        return "npx vitest run"
-    if manager == "yarn":
-        return "yarn vitest run"
-    if manager == "pnpm":
-        return "pnpm vitest run"
-    if manager == "bun":
-        return "bunx vitest run"
-    return "npx vitest run"
+
+    local_vitest = root / "node_modules" / ".bin" / "vitest"
+    if local_vitest.exists():
+        return f"{local_vitest} run"
+    return "No suitable command found; add a Vitest package script or install Vitest locally."
 
 
 def has_dep(package_json, name):
@@ -96,6 +134,7 @@ def detect_frameworks(package_json):
         "vitest": "vitest",
         "vite": "vite",
         "nuxt": "nuxt",
+        "next": "next",
         "vue": "vue",
         "react": "react",
         "svelte": "svelte",
@@ -135,13 +174,15 @@ def build_report(root, limit):
     package_json_path = root / "package.json"
     package_json = read_json(package_json_path)
     scripts = package_json.get("scripts", {}) if package_json else {}
-    manager = detect_package_manager(root)
+    manager = detect_package_manager(root, package_json)
     test_script = detect_likely_test_script(scripts)
     test_files, total_tests = find_test_files(root, limit)
     config_files = [name for name in CONFIG_FILES if (root / name).exists()]
+    project_files = [name for name in PROJECT_FILES if (root / name).exists()]
     frameworks = detect_frameworks(package_json)
 
     warnings = []
+    notes = []
     if not package_json:
         warnings.append("No package.json found.")
     if package_json and not has_dep(package_json, "vitest"):
@@ -151,18 +192,21 @@ def build_report(root, limit):
     if "vue" in frameworks and not any(env in frameworks for env in ("jsdom", "happy-dom")):
         warnings.append("Vue component tests usually need jsdom or happy-dom.")
     if not config_files:
-        warnings.append("No Vitest/Vite config file found.")
+        notes.append("No Vitest/Vite config file found; this is fine for simple Node tests, but DOM, aliases, setup files, coverage, or projects may need config.")
 
     return {
         "root": str(root),
         "package_manager": manager,
+        "package_manager_field": package_json.get("packageManager") if package_json else None,
         "frameworks": frameworks,
         "vitest_scripts": {name: value for name, value in scripts.items() if "vitest" in value},
         "likely_test_script": test_script,
-        "suggested_run_command": package_command(manager, test_script),
+        "suggested_run_command": package_command(root, manager, test_script),
         "config_files": config_files,
+        "project_files": project_files,
         "test_files_sample": test_files,
         "test_files_total": total_tests,
+        "notes": notes,
         "warnings": warnings,
     }
 
@@ -185,9 +229,18 @@ def print_human(report):
     for name in report["config_files"] or ["none"]:
         print(f"  - {name}")
 
+    print("\nWorkspace/project files:")
+    for name in report["project_files"] or ["none"]:
+        print(f"  - {name}")
+
     print(f"\nTest files: {report['test_files_total']}")
     for path in report["test_files_sample"]:
         print(f"  - {path}")
+
+    if report["notes"]:
+        print("\nNotes:")
+        for note in report["notes"]:
+            print(f"  - {note}")
 
     if report["warnings"]:
         print("\nWarnings:")
@@ -217,4 +270,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

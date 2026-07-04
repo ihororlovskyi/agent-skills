@@ -3,10 +3,10 @@
 Run Vitest through the package manager detected from lockfiles.
 
 Usage:
-    python scripts/run_vitest.py --root .
-    python scripts/run_vitest.py --root . -- tests/example.test.ts
-    python scripts/run_vitest.py --root . --coverage -- tests/example.test.ts
-    python scripts/run_vitest.py --root . --test-name "formats currency"
+    python <skill>/scripts/run_vitest.py --root .
+    python <skill>/scripts/run_vitest.py --root . -- tests/example.test.ts
+    python <skill>/scripts/run_vitest.py --root . --coverage -- tests/example.test.ts
+    python <skill>/scripts/run_vitest.py --root . --test-name "formats currency"
 
 Arguments after "--" are passed directly to Vitest.
 """
@@ -36,19 +36,49 @@ def read_package_json(root):
         return {}
 
 
-def detect_package_manager(root):
+def package_manager_field(package_json):
+    value = package_json.get("packageManager") if package_json else None
+    if not isinstance(value, str):
+        return None
+    manager = value.split("@", 1)[0]
+    return manager if manager in {"npm", "pnpm", "yarn", "bun"} else None
+
+
+def detect_package_manager(root, package_json=None):
+    lockfile_managers = []
     for filename, manager in LOCKFILES:
-        if (root / filename).exists():
-            return manager
+        if (root / filename).exists() and manager not in lockfile_managers:
+            lockfile_managers.append(manager)
+    if len(lockfile_managers) == 1:
+        return lockfile_managers[0]
+
+    declared_manager = package_manager_field(package_json)
+    if declared_manager:
+        return declared_manager
+    if lockfile_managers:
+        return lockfile_managers[0]
     return "npm"
 
 
-def find_script(package_json, requested):
+def find_script(package_json, requested, watch=False):
     scripts = package_json.get("scripts", {})
     if requested:
         if requested not in scripts:
             raise SystemExit(f"Script not found in package.json: {requested}")
         return requested
+    if watch:
+        watch_names = ("test:watch", "vitest:watch", "watch:test", "watch")
+        for name in watch_names:
+            value = scripts.get(name)
+            if value and "vitest" in value:
+                return name
+        for name, value in scripts.items():
+            if "vitest" in value and "watch" in value:
+                return name
+        for name, value in scripts.items():
+            if "vitest" in value and "run" not in value:
+                return name
+        return None
     for name in ("test:unit", "test:vitest", "vitest", "test"):
         if name in scripts and "vitest" in scripts[name]:
             return name
@@ -58,7 +88,7 @@ def find_script(package_json, requested):
     return None
 
 
-def build_command(manager, script_name, vitest_args):
+def build_command(root, manager, script_name, vitest_args, watch=False):
     if script_name:
         if manager == "npm":
             return ["npm", "run", script_name, "--", *vitest_args]
@@ -69,16 +99,14 @@ def build_command(manager, script_name, vitest_args):
         if manager == "bun":
             return ["bun", "run", script_name, *vitest_args]
 
-    base_args = ["vitest", "run", *vitest_args]
-    if manager == "npm":
-        return ["npx", *base_args]
-    if manager == "yarn":
-        return ["yarn", *base_args]
-    if manager == "pnpm":
-        return ["pnpm", *base_args]
-    if manager == "bun":
-        return ["bunx", *base_args]
-    return ["npx", *base_args]
+    local_vitest = root / "node_modules" / ".bin" / "vitest"
+    if not local_vitest.exists():
+        raise SystemExit(
+            "No suitable Vitest command found. Add a package.json script that runs Vitest "
+            "or install Vitest locally so node_modules/.bin/vitest exists."
+        )
+
+    return [str(local_vitest), "watch" if watch else "run", *vitest_args]
 
 
 def main():
@@ -87,7 +115,7 @@ def main():
     parser.add_argument("--manager", choices=["npm", "pnpm", "yarn", "bun"], help="Override package manager")
     parser.add_argument("--script", help="Package.json script to run instead of auto-detecting")
     parser.add_argument("--coverage", action="store_true", help="Add --coverage")
-    parser.add_argument("--watch", action="store_true", help="Use watch mode by adding --watch")
+    parser.add_argument("--watch", action="store_true", help="Use watch mode")
     parser.add_argument("--test-name", help="Filter tests by name pattern")
     parser.add_argument("--dry-run", action="store_true", help="Print command without running it")
     parser.add_argument("vitest_args", nargs=argparse.REMAINDER, help="Arguments after -- are passed to Vitest")
@@ -104,15 +132,13 @@ def main():
         vitest_args = vitest_args[1:]
     if args.coverage:
         vitest_args.insert(0, "--coverage")
-    if args.watch:
-        vitest_args.insert(0, "--watch")
     if args.test_name:
         vitest_args = ["--testNamePattern", args.test_name, *vitest_args]
 
     package_json = read_package_json(root)
-    manager = args.manager or detect_package_manager(root)
-    script_name = find_script(package_json, args.script)
-    command = build_command(manager, script_name, vitest_args)
+    manager = args.manager or detect_package_manager(root, package_json)
+    script_name = find_script(package_json, args.script, watch=args.watch)
+    command = build_command(root, manager, script_name, vitest_args, watch=args.watch)
 
     print(f"Root: {root}")
     print(f"Command: {' '.join(command)}")
@@ -125,4 +151,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

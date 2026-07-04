@@ -1,10 +1,10 @@
 ---
 name: vitest
-description: Use when configuring, writing, debugging, migrating, or running Vitest tests in JavaScript or TypeScript projects, including Vite, Vue, Nuxt, React, Node libraries, workspaces, coverage, mocks, fake timers, snapshots, flaky tests, and Jest migration.
+description: Use when configuring, writing, debugging, running, or migrating Vitest tests in JavaScript/TypeScript projects, including Vite, Vue, Nuxt, React, Next, Node libraries, workspaces, coverage, mocks, snapshots, flaky tests, and Jest migration.
 metadata:
-  author: ihororlovskyi
-  version: "1.0"
-license: Apache-2.0
+  author: Ihor Orlovskyi
+  version: "2026.07.05"
+license: MIT
 compatibility: Requires Python and a JavaScript package manager; Vitest must be installed in the target project before tests can run.
 ---
 
@@ -16,7 +16,7 @@ Use this skill to add, fix, or run Vitest tests without turning the task into a 
 - `scripts/inspect_vitest.py` - Detects package manager, Vitest config, scripts, test files, framework hints, and likely run commands
 - `scripts/run_vitest.py` - Runs Vitest through the detected package manager with useful defaults
 
-**Always run scripts with `--help` first** to see usage. DO NOT read the source until you try running the script first and find that a customized solution is absolutely necessary. These scripts are meant to be called directly as black-box helpers.
+`<skill>` means the path to this local skill folder. Run helper scripts with `--help` when usage is unclear or before first use in a session. Prefer using helper scripts as black-box tools. Read or modify their source only when debugging the skill itself or when behavior is unclear.
 
 ## Decision Tree
 
@@ -48,21 +48,44 @@ Then → Write or fix one focused test, run it directly, then broaden only as ne
 
 ## Running Tests
 
-Run the helper help first:
+Run helper help when needed:
 
 ```bash
-python scripts/run_vitest.py --help
+python <skill>/scripts/run_vitest.py --help
 ```
 
 Common pattern:
 
 ```bash
-python scripts/run_vitest.py --root . -- tests/example.test.ts
-python scripts/run_vitest.py --root . --coverage -- tests/example.test.ts
-python scripts/run_vitest.py --root . --test-name "formats currency"
+python <skill>/scripts/inspect_vitest.py --root .
+python <skill>/scripts/run_vitest.py --root . -- tests/example.test.ts
+python <skill>/scripts/run_vitest.py --root . --coverage -- tests/example.test.ts
+python <skill>/scripts/run_vitest.py --root . --test-name "formats currency"
 ```
 
 If the helper cannot infer the package manager or script, use the project's own command exactly as defined in `package.json`.
+
+## Project-Specific Adapters
+
+### Plain Node / Library
+Use `environment: 'node'`. Avoid DOM dependencies unless code requires browser APIs.
+
+### Vue / Vite
+Use Vue Test Utils or the project's existing Testing Library setup. Ensure `jsdom` or `happy-dom` exists before writing DOM/component tests.
+
+### Nuxt
+Prefer `@nuxt/test-utils` when present. Check whether the project uses `environment: 'nuxt'`, `happy-dom`, `jsdom`, or plain `node`. Do not replace Nuxt-aware tests with plain Vue tests for code that depends on Nuxt auto-imports, runtime config, plugins, routes, Nitro/server APIs, or module setup.
+
+### React / Vite
+Use React Testing Library when present. If using `toBeInTheDocument`, verify that `@testing-library/jest-dom/vitest` is imported in an existing setup file, or add it only when the dependency exists or is being installed.
+
+### Next / React
+For Next projects, prefer the existing project setup. Vitest is suitable for unit tests of client components and synchronous components, usually with React Testing Library and `jsdom`.
+
+Do not assume Vitest can fully test async Server Components. For async Server Components, prefer the project's existing E2E setup, usually Playwright or another browser-level test runner.
+
+### Monorepo / Multi-environment
+Check for Vitest test projects/workspace configuration before creating a new config. Preserve existing project boundaries and environment-specific settings.
 
 ## Writing Patterns
 
@@ -76,7 +99,9 @@ If the helper cannot infer the package manager or script, use the project's own 
 
 ## Migration Notes
 
-When migrating from Jest, change imports and globals deliberately:
+Treat Jest migration as a focused refactor, not a blind full-suite rewrite. Migrate one file or repeated pattern first, then run narrow tests.
+
+Map imports and globals deliberately:
 
 - `jest.fn()` → `vi.fn()`
 - `jest.mock()` → `vi.mock()`
@@ -84,7 +109,7 @@ When migrating from Jest, change imports and globals deliberately:
 - `jest.useFakeTimers()` → `vi.useFakeTimers()`
 - `jest.resetModules()` → `vi.resetModules()`
 
-Do not enable Vitest globals just to avoid imports unless the existing project already uses global test APIs.
+Also check timer behavior, fake timers, snapshots, config differences, setup files, aliases, and test environment. Do not enable Vitest globals just to avoid imports unless the existing project already uses global test APIs.
 
 ## Common Failure Modes
 
@@ -100,4 +125,3 @@ Do not enable Vitest globals just to avoid imports unless the existing project a
 - `examples/node_function.test.ts` - Pure TypeScript/Node logic
 - `examples/react_component.test.tsx` - React Testing Library style
 - `examples/vue_component.test.ts` - Vue Test Utils style
-
