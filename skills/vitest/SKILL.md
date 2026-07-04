@@ -75,6 +75,9 @@ Use Vue Test Utils or the project's existing Testing Library setup. Ensure `jsdo
 ### Nuxt
 Prefer `@nuxt/test-utils` when present. Check whether the project uses `environment: 'nuxt'`, `happy-dom`, `jsdom`, or plain `node`. Do not replace Nuxt-aware tests with plain Vue tests for code that depends on Nuxt auto-imports, runtime config, plugins, routes, Nitro/server APIs, or module setup.
 
+### Vue / Nuxt Gotchas
+For Pinia-dependent components/composables, use the project's existing Pinia testing setup instead of hand-rolled mocks. For async Vue rendering, await framework utilities such as `nextTick`/`flushPromises` or Testing Library `findBy*` queries; do not sleep. For Suspense, async components, Teleport, plugins, or provide/inject, prefer existing project test helpers before creating new wrappers.
+
 ### React / Vite
 Use React Testing Library when present. If using `toBeInTheDocument`, verify that `@testing-library/jest-dom/vitest` is imported in an existing setup file, or add it only when the dependency exists or is being installed.
 
@@ -94,7 +97,10 @@ Check for Vitest test projects/workspace configuration before creating a new con
 - For dates and timers, use fake timers and restore real timers in teardown.
 - For async code, await observable outcomes instead of sleeping.
 - For components, render through the framework's testing library and assert accessible output.
+- For repeated setup, prefer small local helpers or Vitest fixtures/`test.extend` over copy-pasting large setup blocks.
+- For type-level assertions, use `expectTypeOf` or `assertType` only when the project already has type tests or the user explicitly asks.
 - For coverage, add thresholds only when the project already enforces them or the user asks.
+- When adding a sample test, pick a real existing source file. Do not invent fake modules just to demonstrate syntax.
 
 ## Migration Notes
 
