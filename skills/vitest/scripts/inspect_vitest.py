@@ -9,6 +9,8 @@ Usage:
 
 import argparse
 import json
+import re
+import subprocess
 from pathlib import Path
 
 
@@ -70,6 +72,45 @@ TEST_GLOBS = [
 ]
 
 IGNORE_PARTS = {"node_modules", "dist", "build", "coverage", ".git", ".next", ".nuxt", ".output"}
+
+
+def parse_version(value):
+    if not value:
+        return None
+    match = re.search(r"v?(\d+)(?:\.(\d+))?(?:\.(\d+))?", str(value))
+    if not match:
+        return None
+    return tuple(int(part) for part in match.groups() if part is not None)
+
+
+def is_exact_version(value):
+    return bool(re.fullmatch(r"\s*v?\d+\.\d+\.\d+\s*", str(value or "")))
+
+
+def matches_version_prefix(current, expected):
+    return current[: len(expected)] == expected
+
+
+def read_optional_text(path):
+    try:
+        return path.read_text(encoding="utf-8").strip()
+    except OSError:
+        return None
+
+
+def current_node_version():
+    try:
+        result = subprocess.run(
+            ["node", "-v"],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+    except OSError:
+        return None
+    if result.returncode != 0:
+        return None
+    return result.stdout.strip() or None
 
 
 def read_json(path):
@@ -152,6 +193,47 @@ def detect_frameworks(package_json):
     return sorted(label for label, dep in checks.items() if has_dep(package_json, dep))
 
 
+def inspect_node(root, package_json):
+    current = current_node_version()
+    engines = package_json.get("engines", {}) if package_json else {}
+    volta = package_json.get("volta", {}) if package_json else {}
+    node = {
+        "current": current,
+        ".nvmrc": read_optional_text(root / ".nvmrc"),
+        ".node-version": read_optional_text(root / ".node-version"),
+        "package_json_engines_node": engines.get("node") if isinstance(engines, dict) else None,
+        "package_json_volta_node": volta.get("node") if isinstance(volta, dict) else None,
+        "warnings": [],
+    }
+
+    current_version = parse_version(current)
+    exact_sources = {
+        ".nvmrc": node[".nvmrc"],
+        ".node-version": node[".node-version"],
+        "package.json volta.node": node["package_json_volta_node"],
+    }
+    for source, expected in exact_sources.items():
+        expected_version = parse_version(expected)
+        if is_exact_version(expected) and current_version and expected_version and current_version != expected_version:
+            node["warnings"].append(
+                f"Current Node {current} does not match {source} ({expected})."
+            )
+
+    engines_node = node["package_json_engines_node"]
+    engine_version = parse_version(engines_node)
+    if current_version and engine_version and isinstance(engines_node, str):
+        if engines_node.strip().startswith((">=", ">")) and current_version < engine_version:
+            node["warnings"].append(
+                f"Current Node {current} appears below package.json engines.node ({engines_node})."
+            )
+        elif re.fullmatch(r"\s*v?\d+(?:\.\d+){0,2}\s*", engines_node) and not matches_version_prefix(current_version, engine_version):
+            node["warnings"].append(
+                f"Current Node {current} does not match package.json engines.node ({engines_node})."
+            )
+
+    return node
+
+
 def find_test_files(root, limit):
     files = []
     for pattern in TEST_GLOBS:
@@ -186,6 +268,7 @@ def build_report(root, limit):
     config_files = [name for name in CONFIG_FILES if (root / name).exists()]
     project_files = [name for name in PROJECT_FILES if (root / name).exists()]
     frameworks = detect_frameworks(package_json)
+    node = inspect_node(root, package_json)
 
     warnings = []
     notes = []
@@ -204,6 +287,7 @@ def build_report(root, limit):
         "root": str(root),
         "package_manager": manager,
         "package_manager_field": package_json.get("packageManager") if package_json else None,
+        "node": node,
         "frameworks": frameworks,
         "vitest_scripts": {name: value for name, value in scripts.items() if "vitest" in value},
         "likely_test_script": test_script,
@@ -222,6 +306,16 @@ def print_human(report):
     print(f"Package manager: {report['package_manager']}")
     print(f"Framework hints: {', '.join(report['frameworks']) or 'none'}")
     print(f"Suggested run command: {report['suggested_run_command']}")
+
+    print("\nNode:")
+    node = report["node"]
+    print(f"  - current: {node['current'] or 'not found'}")
+    print(f"  - .nvmrc: {node['.nvmrc'] or 'none'}")
+    print(f"  - .node-version: {node['.node-version'] or 'none'}")
+    print(f"  - package.json engines.node: {node['package_json_engines_node'] or 'none'}")
+    print(f"  - package.json volta.node: {node['package_json_volta_node'] or 'none'}")
+    for warning in node["warnings"]:
+        print(f"  - warning: {warning}")
 
     print("\nVitest scripts:")
     if report["vitest_scripts"]:
