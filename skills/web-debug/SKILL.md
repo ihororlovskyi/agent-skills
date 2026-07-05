@@ -26,7 +26,7 @@ User task → Is it static HTML?
     │         └─ Fails/Incomplete → Treat as dynamic (below)
     │
     └─ No (dynamic webapp) → Is the server already running?
-        ├─ No → Run: python scripts/with_server.py --help
+        ├─ No → Run: python <skill>/scripts/with_server.py --help
         │        Then use the helper + write simplified Playwright script
         │
         └─ Yes → Reconnaissance-then-action:
@@ -43,7 +43,7 @@ User task → Is it static HTML?
 To start a server, run `--help` first, then use the helper:
 
 ```bash
-python scripts/with_server.py --server "npm run dev" --port 5173 -- python your_automation.py
+python <skill>/scripts/with_server.py --server "npm run dev" --port 5173 -- python your_automation.py
 ```
 
 To create an automation script, include only Playwright logic (servers are managed automatically):
@@ -56,7 +56,8 @@ with sync_playwright() as p:
     page = browser.new_page()
     page.on('console', lambda msg: print(f'[console.{msg.type}] {msg.text}')) # msg.type: log, debug, info, warning, error
     page.on('pageerror', lambda err: print(f'[pageerror] {err}')) # Uncaught JS exceptions are not console events
-    page.on('requestfailed', lambda req: print(f'[requestfailed] {req.url} {req.failure}')) # Hint only - see Interpreting Failures
+    page.on('requestfailed', lambda req: print(
+        f'[requestfailed] {req.url} {req.failure or "unknown"}')) # failure is Optional[str] in Python; hint only - see Interpreting Failures
     page.on('response', lambda res: res.status >= 400 and print(f'[http {res.status}] {res.url}'))
     page.goto('http://localhost:5173', wait_until='domcontentloaded') # Server already running and ready
     try:

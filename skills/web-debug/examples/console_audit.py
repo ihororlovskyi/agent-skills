@@ -25,7 +25,7 @@ with sync_playwright() as p:
         page.on('pageerror', lambda err, m=msgs: m.append(f'[pageerror] {str(err)[:MAX_LEN]}'))
         # requestfailed is a hint, not proof - see "Interpreting Failures" in SKILL.md
         page.on('requestfailed', lambda req, m=msgs: m.append(
-            f'[requestfailed] {req.url[:MAX_LEN]} {req.failure}'))
+            f'[requestfailed] {req.url[:MAX_LEN]} {req.failure or "unknown"}'))
         page.on('response', lambda res, m=msgs: res.status >= 400
                 and m.append(f'[http {res.status}] {res.url[:MAX_LEN]}'))
 
