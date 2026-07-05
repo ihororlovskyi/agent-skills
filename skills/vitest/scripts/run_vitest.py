@@ -225,7 +225,7 @@ def main():
         if blockers:
             for blocker in blockers:
                 print(blocker)
-            print("Run `nvm use` or switch Node before running Vitest.")
+            print("Switch to the project Node version before running Vitest, for example with nvm/fnm/Volta/mise/asdf.")
             print("Use --skip-node-check to bypass this check.")
             sys.exit(1)
 
