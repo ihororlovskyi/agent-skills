@@ -3,6 +3,17 @@
 Repository-level changelog. Versions here are repository git tags (`vX.Y.Z`);
 individual skill versions live in each skill's `metadata.version`.
 
+## [1.0.1] - Unreleased
+
+### Added
+- Per-skill `CHANGELOG.md` for `vitest` and `web-debug` (Keep a Changelog style;
+  not referenced from SKILL.md so it never enters an agent's context)
+- `AGENTS.md` (+ `CLAUDE.md` importing it) with repository conventions:
+  English-only content, plain semver in skill metadata with `v` prefix reserved
+  for git tags, feature-branch + squash-merge workflow
+- Basic CI: SKILL.md frontmatter validation (name/description/semver version),
+  Python compile check for scripts and examples, hidden/bidi Unicode check
+
 ## [1.0.0] - 2026-07-05
 
 First tagged release of the skills collection, published on

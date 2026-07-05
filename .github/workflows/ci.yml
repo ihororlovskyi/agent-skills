@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Validate SKILL.md frontmatter
+        run: |
+          python - <<'EOF'
+          import pathlib, re, sys
+
+          errors = []
+          for skill_md in sorted(pathlib.Path("skills").glob("*/SKILL.md")):
+              text = skill_md.read_text(encoding="utf-8")
+              m = re.match(r"^---\n(.*?)\n---\n", text, re.DOTALL)
+              if not m:
+                  errors.append(f"{skill_md}: missing YAML frontmatter")
+                  continue
+              fm = m.group(1)
+              name = re.search(r"^name:\s*(\S+)\s*$", fm, re.MULTILINE)
+              if not name:
+                  errors.append(f"{skill_md}: missing 'name'")
+              elif name.group(1) != skill_md.parent.name:
+                  errors.append(f"{skill_md}: name '{name.group(1)}' != directory '{skill_md.parent.name}'")
+              if not re.search(r"^description:\s*\S", fm, re.MULTILINE):
+                  errors.append(f"{skill_md}: missing 'description'")
+              if not re.search(r'^\s*version:\s*"\d+\.\d+\.\d+"\s*$', fm, re.MULTILINE):
+                  errors.append(f"{skill_md}: metadata.version must be plain semver X.Y.Z")
+
+          for err in errors:
+              print(f"::error::{err}")
+          sys.exit(1 if errors else 0)
+          EOF
+
+      - name: Compile Python scripts and examples
+        run: |
+          python -m compileall -q skills/*/scripts skills/*/examples
+
+      - name: Check for hidden/bidirectional Unicode
+        run: |
+          ! grep -rnP '[\x{200B}-\x{200F}\x{202A}-\x{202E}\x{2066}-\x{2069}\x{FEFF}]' skills README.md AGENTS.md CHANGELOG.md
