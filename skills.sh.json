@@ -1,0 +1,21 @@
+{
+  "$schema": "https://skills.sh/schemas/skills.sh.schema.json",
+  "notGrouped": "bottom",
+  "groupings": [
+    {
+      "title": "JavaScript & TypeScript",
+      "description": "Script-assisted skills for TypeScript configuration, diagnostics, and Vitest testing.",
+      "skills": [
+        "typescript",
+        "vitest"
+      ]
+    },
+    {
+      "title": "Web Debugging",
+      "description": "Browser-based debugging of local web apps.",
+      "skills": [
+        "web-debug"
+      ]
+    }
+  ]
+}
