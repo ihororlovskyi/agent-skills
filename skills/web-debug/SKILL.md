@@ -2,8 +2,8 @@
 name: web-debug
 description: Toolkit for interacting with and testing local web applications using Playwright. Supports verifying frontend functionality, debugging UI behavior, capturing browser screenshots, and viewing browser logs.
 metadata:
-  author: ihororlovskyi
-  version: "1.2"
+  author: Ihor Orlovskyi
+  version: "1.1.1"
 license: Apache-2.0
 compatibility: Requires Python and Playwright
 ---
