@@ -3,7 +3,7 @@ name: vitest
 description: Use when configuring, writing, debugging, running, or migrating Vitest tests in JavaScript/TypeScript projects, including Vite, Vue, Nuxt, React, Next.js, Node libraries, workspaces, coverage, mocks, snapshots, flaky tests, and Jest migration.
 metadata:
   author: Ihor Orlovskyi
-  version: "2026.07.05"
+  version: "1.0.1"
 license: MIT
 compatibility: Requires Python and a JavaScript package manager; Vitest must be installed in the target project before tests can run.
 ---
@@ -63,6 +63,27 @@ python <skill>/scripts/run_vitest.py --root . --test-name "formats currency"
 ```
 
 If the helper cannot infer the package manager or script, use the project's own command exactly as defined in `package.json`.
+
+## CI-Only Failures
+
+When tests fail in CI but pass locally, check environment differences before rewriting tests:
+
+- Node version: `node -v`, `.nvmrc`, `.node-version`, `package.json#engines`
+- Package manager and lockfile: use the same install command as CI
+- Case-sensitive paths: Linux CI may fail on imports that macOS accepts
+- Tracked files: verify that required fixtures/config files are committed
+- Exact filename case: use `git ls-files` to confirm tracked path casing
+- Environment variables: compare local `.env*` assumptions with CI config
+
+Useful checks:
+
+```bash
+node -v
+cat .nvmrc 2>/dev/null || true
+node -p "require('./package.json').engines?.node" 2>/dev/null || true
+git ls-files | grep -i 'expected-file-name'
+git ls-files | awk '{ print tolower($0) }' | sort | uniq -d
+```
 
 ## Project-Specific Adapters
 

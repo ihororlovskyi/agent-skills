@@ -13,6 +13,7 @@ Arguments after "--" are passed directly to Vitest.
 
 import argparse
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -26,6 +27,45 @@ LOCKFILES = [
     ("package-lock.json", "npm"),
     ("npm-shrinkwrap.json", "npm"),
 ]
+
+
+def parse_version(value):
+    if not value:
+        return None
+    match = re.search(r"v?(\d+)(?:\.(\d+))?(?:\.(\d+))?", str(value))
+    if not match:
+        return None
+    return tuple(int(part) for part in match.groups() if part is not None)
+
+
+def is_exact_version(value):
+    return bool(re.fullmatch(r"\s*v?\d+\.\d+\.\d+\s*", str(value or "")))
+
+
+def matches_version_prefix(current, expected):
+    return current[: len(expected)] == expected
+
+
+def read_optional_text(path):
+    try:
+        return path.read_text(encoding="utf-8").strip()
+    except OSError:
+        return None
+
+
+def current_node_version():
+    try:
+        result = subprocess.run(
+            ["node", "-v"],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+    except OSError:
+        return None
+    if result.returncode != 0:
+        return None
+    return result.stdout.strip() or None
 
 
 def read_package_json(root):
@@ -88,6 +128,47 @@ def find_script(package_json, requested, watch=False):
     return None
 
 
+def check_node_version(root, package_json):
+    current = current_node_version()
+    current_version = parse_version(current)
+    blockers = []
+    warnings = []
+
+    engines = package_json.get("engines", {}) if package_json else {}
+    volta = package_json.get("volta", {}) if package_json else {}
+    exact_hints = {
+        ".nvmrc": read_optional_text(root / ".nvmrc"),
+        ".node-version": read_optional_text(root / ".node-version"),
+        "package.json volta.node": volta.get("node") if isinstance(volta, dict) else None,
+    }
+
+    if not current:
+        if any(exact_hints.values()) or (isinstance(engines, dict) and engines.get("node")):
+            blockers.append("Project declares a Node version, but `node -v` is not available.")
+        return blockers, warnings
+
+    for source, expected in exact_hints.items():
+        expected_version = parse_version(expected)
+        if is_exact_version(expected) and current_version and expected_version and current_version != expected_version:
+            blockers.append(
+                f"Project expects Node {expected} from {source}, but current Node is {current}."
+            )
+
+    engines_node = engines.get("node") if isinstance(engines, dict) else None
+    engine_version = parse_version(engines_node)
+    if current_version and engine_version and isinstance(engines_node, str):
+        if engines_node.strip().startswith((">=", ">")) and current_version < engine_version:
+            warnings.append(
+                f"package.json engines.node is {engines_node}, but current Node is {current}."
+            )
+        elif re.fullmatch(r"\s*v?\d+(?:\.\d+){0,2}\s*", engines_node) and not matches_version_prefix(current_version, engine_version):
+            warnings.append(
+                f"package.json engines.node is {engines_node}, but current Node is {current}."
+            )
+
+    return blockers, warnings
+
+
 def build_command(root, manager, script_name, vitest_args, watch=False):
     if script_name:
         if manager == "npm":
@@ -117,6 +198,7 @@ def main():
     parser.add_argument("--coverage", action="store_true", help="Add --coverage")
     parser.add_argument("--watch", action="store_true", help="Use watch mode")
     parser.add_argument("--test-name", help="Filter tests by name pattern")
+    parser.add_argument("--skip-node-check", action="store_true", help="Skip project Node version preflight")
     parser.add_argument("--dry-run", action="store_true", help="Print command without running it")
     parser.add_argument("vitest_args", nargs=argparse.REMAINDER, help="Arguments after -- are passed to Vitest")
     args = parser.parse_args()
@@ -136,6 +218,17 @@ def main():
         vitest_args = ["--testNamePattern", args.test_name, *vitest_args]
 
     package_json = read_package_json(root)
+    if not args.skip_node_check:
+        blockers, warnings = check_node_version(root, package_json)
+        for warning in warnings:
+            print(f"Warning: {warning}")
+        if blockers:
+            for blocker in blockers:
+                print(blocker)
+            print("Switch to the project Node version before running Vitest, for example with nvm/fnm/Volta/mise/asdf.")
+            print("Use --skip-node-check to bypass this check.")
+            sys.exit(1)
+
     manager = args.manager or detect_package_manager(root, package_json)
     script_name = find_script(package_json, args.script, watch=args.watch)
     command = build_command(root, manager, script_name, vitest_args, watch=args.watch)

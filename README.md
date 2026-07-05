@@ -6,8 +6,8 @@ A collection of [agent skills](https://agentskills.io) for Claude Code and other
 
 | Skill | Description |
 | --- | --- |
-| [web-debug](skills/web-debug/SKILL.md) | Debug local web apps via Playwright. |
-| [vitest](skills/vitest/SKILL.md) | Configure, write, debug, run, and migrate Vitest tests for JavaScript/TypeScript projects. |
+| [web-debug](skills/web-debug/SKILL.md) | Debug local web apps via Playwright.<br>Script-assisted browser debugging skill. |
+| [vitest](skills/vitest/SKILL.md) | Configure, write, debug, run, and migrate Vitest tests for JavaScript/TypeScript projects.<br>Script-assisted Vitest skill. |
 
 ## Install
 
