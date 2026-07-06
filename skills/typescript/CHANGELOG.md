@@ -3,6 +3,28 @@
 All notable changes to the `typescript` skill. Versions refer to `metadata.version`
 in SKILL.md. This file is for maintainers and is never loaded by agents using the skill.
 
+## [1.0.1] - 2026-07-07
+
+Driven by feedback from four real-world sessions (Vue/Nuxt audits and hardening tasks).
+
+### Added
+- Framework Projects section: vue-tsc / nuxi typecheck / svelte-check / astro check,
+  framework-generated tsconfig guidance (never edit `.nuxt/tsconfig.*` etc.)
+- Audit & Hardening section: setup/coverage/strictness checklist, hygiene grep
+  patterns with prioritization, strictness flags ordered by fixing cost
+- `inspect_typescript.py`: framework checker detection, report of source files
+  not covered by any tsconfig (skipped for generated-config frameworks)
+- `run_typecheck.py`: uses vue-tsc when present, falls back to `nuxi typecheck`
+  for Nuxt projects
+- Error playbook: TS5101 (`baseUrl` deprecated), `__VLS_ctx` / TS18048 in Vue SFCs
+
+### Changed
+- Decision tree: skip helper scripts when project docs already name the typecheck
+  command or the project has a single tsconfig without extends
+- Rule 5 (never silence errors with any/as/@ts-ignore): explicit exception for
+  casts at test mock boundaries
+- description: added audit/hardening trigger; excludes general feature work in TS codebases
+
 ## [1.0.0] - 2026-07-05
 
 Initial release.

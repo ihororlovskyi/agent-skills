@@ -1,9 +1,9 @@
 ---
 name: typescript
-description: Use when configuring tsconfig, resolving TypeScript compiler errors, debugging slow type-checking or builds, fixing module resolution and ESM/CJS issues, migrating JavaScript to TypeScript, or setting up type-checking in monorepos.
+description: Use when configuring tsconfig, resolving TypeScript compiler errors, debugging slow type-checking or builds, fixing module resolution and ESM/CJS issues, auditing or hardening type strictness in an existing codebase, migrating JavaScript to TypeScript, or setting up type-checking in monorepos. Not for general feature work that merely happens in a TypeScript codebase.
 metadata:
   author: Ihor Orlovskyi
-  version: "1.0.0"
+  version: "1.0.1"
 license: MIT
 compatibility: Requires Python and a JavaScript package manager; TypeScript must be installed in the target project (locally or resolvable via npx).
 ---
@@ -13,7 +13,7 @@ compatibility: Requires Python and a JavaScript package manager; TypeScript must
 Use this skill to configure, diagnose, and fix TypeScript projects. It is a workflow, not a language reference: the type system syntax is assumed knowledge, and the focus is on compiler behavior, configuration, and cryptic failures.
 
 **Helper Scripts Available**:
-- `scripts/inspect_typescript.py` - Detects package manager, TypeScript version, tsconfig files with extends chains and effective flags, monorepo markers, linter, runner, and the recommended typecheck command
+- `scripts/inspect_typescript.py` - Detects package manager, TypeScript version, tsconfig files with extends chains and effective flags, framework checker (vue-tsc, nuxi, svelte-check, astro), source files not covered by any tsconfig, monorepo markers, linter, runner, and the recommended typecheck command
 - `scripts/run_typecheck.py` - Runs type-checking through the detected package manager and summarizes errors by code and file
 - `scripts/trace_perf.py` - Measures compilation via `--extendedDiagnostics`, flags anomalies, optionally writes a compiler trace
 
@@ -23,7 +23,10 @@ Use this skill to configure, diagnose, and fix TypeScript projects. It is a work
 
 ```
 User task -> Existing project?
-    - Yes -> Run: python <skill>/scripts/inspect_typescript.py --root <project>
+    - Yes -> Project docs (CLAUDE.md/AGENTS.md/README) or package.json already
+             name the typecheck command, and it is a single tsconfig without
+             extends? -> Use that command directly; skip the helper scripts.
+             Otherwise run: python <skill>/scripts/inspect_typescript.py --root <project>
              Use detected manager, tsconfig chain, effective flags, monorepo layout.
     - No  -> Create the smallest strict tsconfig matching the runtime.
              Do not paste large config templates; set only what the project needs.
@@ -33,10 +36,13 @@ Next -> What is the symptom?
     - Cryptic compiler error          -> references/error-playbook.md
     - "Cannot find module" / imports  -> references/module-resolution.md
     - Slow tsc / slow editor          -> trace_perf.py, then Performance below
+    - Audit / harden a green project -> Audit & Hardening below
     - JavaScript to TypeScript        -> references/migration.md
     - Monorepo / project references   -> references/monorepo.md
     - New tsconfig / stricter flags   -> Configuration below
 ```
+
+The helper scripts pay off in monorepos and extends chains; on a small project with one tsconfig, reading the config and running the checker directly is faster.
 
 ## Core Workflow
 
@@ -44,7 +50,7 @@ Next -> What is the symptom?
 2. Match the project: keep its `module`/`moduleResolution` pair, its extends chain, and its package manager. Do not switch resolution strategies to silence one error.
 3. Prefer the minimal fix: one flag, one type annotation, one dependency — not a rewritten tsconfig.
 4. Verify narrowly first: `run_typecheck.py --project <pkg tsconfig>` or `--files` before a full-repo check.
-5. Never "fix" an error with `any`, `as`, or `@ts-ignore` to get to green. Reaching for them means the actual cause is not yet understood; find it first, and use targeted narrowing or a documented `@ts-expect-error` only as a last resort.
+5. Never "fix" an error with `any`, `as`, or `@ts-ignore` to get to green. Reaching for them means the actual cause is not yet understood; find it first, and use targeted narrowing or a documented `@ts-expect-error` only as a last resort. One pragmatic exception: casts at test mock boundaries (`mock as unknown as Service`) are acceptable in test files; production code is not.
 
 ## Configuration
 
@@ -55,6 +61,32 @@ Direction for new or hardened configs (adopt, do not paste wholesale):
 - `module`/`moduleResolution`: `NodeNext` for Node libraries and servers, `ESNext`/`bundler` for bundled apps. These two options must be chosen as a pair; see references/module-resolution.md.
 - `skipLibCheck: true` is a pragmatic default; remove it only when debugging a broken dependency's types.
 - Respect the extends chain: change the leaf config for a package-local need, the base config for a repo-wide policy.
+- Order new flags by fixing cost: `noUnusedLocals`/`noUnusedParameters` (cheap) -> `noFallthroughCasesInSwitch`/`noImplicitOverride` (near-free) -> `exactOptionalPropertyTypes` -> `noUncheckedIndexedAccess` (most expensive, last).
+
+## Framework Projects (Vue, Nuxt, Svelte, Astro)
+
+Plain `tsc --noEmit` silently ignores `.vue`/`.svelte`/`.astro` component files — a green run proves nothing there. Use the framework's checker:
+
+| Stack | Typecheck command |
+| --- | --- |
+| Vue SFC | `vue-tsc --noEmit` |
+| Nuxt | `npx nuxi typecheck` |
+| Svelte / SvelteKit | `svelte-check` |
+| Astro | `astro check` |
+
+Framework-generated tsconfig (Nuxt `.nuxt/tsconfig.*`, SvelteKit `.svelte-kit/tsconfig.json`, Astro's base): never edit generated files — the effective flags may live there, not in the root config. Set options through the framework config (e.g. `typescript.tsConfig` in `nuxt.config.ts`) or the root tsconfig that extends the generated one. Template type errors surface as `__VLS_ctx.x is possibly 'undefined'` (TS18048) — the fix is in the SFC template or props; see references/error-playbook.md.
+
+## Audit & Hardening
+
+For "audit the TypeScript setup" or "tighten types" on a project that already checks green:
+
+1. Setup: `typescript` pinned in devDependencies; a `typecheck` script in package.json; CI runs it.
+2. Coverage: every `.ts`/`.tsx`/`.vue` file falls inside some tsconfig's `include` (inspect_typescript.py reports uncovered files) — uncovered code is never type-checked.
+3. Effective strictness: read effective flags from the inspect output; framework-generated configs may set flags the root config does not show.
+4. Hygiene grep: `: any`, `as any`, `@ts-ignore`, `@ts-expect-error`, non-null `!`. Prioritize exported/public APIs and component props > server boundaries > internal utilities. Replace assertions with real guards or type predicates; make a prop required instead of optional when every call site passes it.
+5. Enable missing strictness flags one at a time, cheapest first (order above), fixing fallout per flag.
+
+Linter rules (`no-explicit-any` and friends) are the linter's domain, not this skill's: note them in audit findings, fix them via lint config.
 
 ## Error Playbook (quick)
 
@@ -66,6 +98,8 @@ Full catalog with causes and prioritized fixes: references/error-playbook.md.
 | TS2742 The inferred type cannot be named | Export the referenced type explicitly or annotate the declaration's return type |
 | TS2589 Type instantiation is excessively deep | Break the recursion: simplify generic constraints, split unions, alias intermediate types |
 | Excessive stack depth comparing types | Replace large type intersections with `interface extends`; limit recursive conditional types |
+| TS5101 'baseUrl' is deprecated | Delete `baseUrl`; rewrite `paths` relative to the tsconfig (`"@/*": ["./src/*"]`) — `ignoreDeprecations` often masks exactly this |
+| `__VLS_ctx.x` is possibly 'undefined' (TS18048) | Template error in a Vue SFC: make the prop required or default it, or guard in the template |
 | Editor shows errors CLI does not (or reverse) | Compare the TypeScript versions: editor's bundled TS vs workspace `node_modules/typescript` |
 
 ## Performance

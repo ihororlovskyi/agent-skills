@@ -61,6 +61,23 @@ Cause: JS package without bundled or DefinitelyTyped types.
 2. No @types package: ambient `declare module "x";` in an included `.d.ts` (untyped but explicit).
 3. Writing real declarations is worth it only for heavily used APIs; start minimal (declare just the functions you call).
 
+## TS5101: Option 'baseUrl' is deprecated
+
+Cause: TypeScript 6.x deprecates `baseUrl`; projects that carried `ignoreDeprecations` are often masking exactly this, and the error appears the moment that escape hatch is removed.
+
+1. Delete `baseUrl` and rewrite `paths` entries relative to the tsconfig location: `"@/*": ["./src/*"]`.
+2. Bare non-relative imports that relied on `baseUrl` alone (no `paths`): add explicit `paths` mappings or convert to relative imports.
+3. Remove `ignoreDeprecations` afterwards so the next deprecation is not silently masked.
+
+## `__VLS_ctx.x` is possibly 'undefined' (TS18048 in .vue files)
+
+Cause: `vue-tsc` type-checks SFC templates through a generated context object named `__VLS_ctx`; the error points at template usage of an optional prop, ref, or injected value — the fix belongs in the component, not in any `__VLS_*` code.
+
+1. If every parent already passes the prop, make it required (or give it a default) instead of optional.
+2. Otherwise guard the usage in the template (`v-if`) or narrow it in `script setup` via a computed.
+3. Template refs to child components: type them with `InstanceType<typeof ChildComponent>`.
+4. Remember `tsc` never sees `.vue` files — only `vue-tsc` (or `nuxi typecheck`) surfaces these errors; a green plain `tsc` run is not evidence.
+
 ## Editor and CLI disagree on errors
 
 Cause: two different TypeScript versions (editor's bundled TS vs `node_modules/typescript`), or the editor uses a different tsconfig than the CLI run.

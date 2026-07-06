@@ -90,17 +90,31 @@ def make_files_config(root, files, project):
 def build_command(root, args, manager, files_config=None):
     pkg = load_json(root / "package.json") or {}
     scripts = pkg.get("scripts", {}) if isinstance(pkg.get("scripts"), dict) else {}
+    deps = {}
+    for key in ("dependencies", "devDependencies"):
+        if isinstance(pkg.get(key), dict):
+            deps.update(pkg[key])
     if not args.project and not args.files:
         for name in ("typecheck", "type-check", "check-types"):
             if name in scripts:
                 return [manager or "npm", "run", name], "project script '{}'".format(name)
+        # Framework checkers: plain tsc would silently skip .vue/.svelte/.astro files.
+        prefix = list(EXEC_PREFIX.get(manager or "npm", ["npx"]))
+        if "nuxt" in deps:
+            return prefix + ["nuxi", "typecheck"], "nuxi typecheck"
+        if "astro" in deps:
+            return prefix + ["astro", "check"], "astro check"
+        if "svelte" in deps or "@sveltejs/kit" in deps:
+            return prefix + ["svelte-check"], "svelte-check"
     command = list(EXEC_PREFIX.get(manager or "npm", ["npx"]))
-    command += ["tsc", "--noEmit", "--pretty", "false"]
+    # vue-tsc is a drop-in tsc replacement that also checks .vue SFCs.
+    checker = "vue-tsc" if "vue-tsc" in deps else "tsc"
+    command += [checker, "--noEmit", "--pretty", "false"]
     if files_config is not None:
         command += ["-p", files_config.name]
     elif args.project:
         command += ["-p", args.project]
-    return command, "direct tsc"
+    return command, "direct {}".format(checker)
 
 
 def summarize(output):

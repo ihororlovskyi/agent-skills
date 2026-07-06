@@ -55,9 +55,25 @@ KEY_FLAGS = [
     "skipLibCheck",
 ]
 
-IGNORE_PARTS = {"node_modules", "dist", "build", "coverage", ".git", ".next", ".nuxt", ".output"}
+IGNORE_PARTS = {"node_modules", "dist", "build", "coverage", ".git", ".next", ".nuxt", ".output", ".svelte-kit", ".astro"}
 
-EXEC_TSC = {"pnpm": "pnpm exec tsc", "yarn": "yarn tsc", "bun": "bunx tsc", "npm": "npx tsc"}
+EXEC_PREFIX = {"pnpm": "pnpm exec", "yarn": "yarn", "bun": "bunx", "npm": "npx"}
+
+# (framework, dependency that identifies it, checker command). Order matters:
+# meta-frameworks first, since e.g. a Nuxt project also depends on vue.
+FRAMEWORKS = [
+    ("nuxt", "nuxt", "nuxi typecheck"),
+    ("astro", "astro", "astro check"),
+    ("sveltekit", "@sveltejs/kit", "svelte-check"),
+    ("svelte", "svelte", "svelte-check"),
+    ("vue", "vue", "vue-tsc --noEmit"),
+]
+
+# Frameworks whose effective tsconfig is generated (into .nuxt/, .svelte-kit/, ...);
+# file-coverage analysis against visible tsconfigs would be misleading there.
+GENERATED_CONFIG_FRAMEWORKS = {"nuxt", "astro", "sveltekit", "svelte"}
+
+SOURCE_SUFFIXES = {".ts", ".tsx", ".mts", ".cts", ".vue"}
 
 
 def strip_jsonc(text):
@@ -116,7 +132,7 @@ def detect_package_manager(root):
     declared = pkg.get("packageManager")
     if isinstance(declared, str):
         manager = declared.split("@")[0]
-        if manager in EXEC_TSC:
+        if manager in EXEC_PREFIX:
             return manager, "package.json#packageManager"
     return None, None
 
@@ -170,17 +186,22 @@ def resolve_extends_target(entry, base_dir, root):
 
 
 def load_config_chain(path, root, seen=None):
-    """Return (chain_labels, merged_compiler_options, references) for a tsconfig."""
+    """Return (chain_labels, merged_compiler_options, references, file_sets) for a tsconfig.
+
+    file_sets holds the effective include/files/exclude lists (nearest config wins,
+    matching how tsc inherits them through extends).
+    """
     seen = seen if seen is not None else set()
     resolved = path.resolve()
     if resolved in seen:
-        return [], {}, []
+        return [], {}, [], {}
     seen.add(resolved)
     config = load_jsonc(path)
     if config is None:
-        return [relative_label(path, root) + " (unparsable)"], {}, []
+        return [relative_label(path, root) + " (unparsable)"], {}, [], {}
     chain = []
     options = {}
+    file_sets = {}
     extends = config.get("extends")
     entries = extends if isinstance(extends, list) else ([extends] if extends else [])
     for entry in entries:
@@ -188,17 +209,21 @@ def load_config_chain(path, root, seen=None):
         if target is None:
             chain.append(entry + " (unresolved)")
             continue
-        sub_chain, sub_options, _ = load_config_chain(target, root, seen)
+        sub_chain, sub_options, _, sub_file_sets = load_config_chain(target, root, seen)
         chain.extend(sub_chain)
         options.update(sub_options)
+        file_sets.update(sub_file_sets)
     chain.append(relative_label(path, root))
     options.update(config.get("compilerOptions", {}) or {})
+    for key in ("include", "files", "exclude"):
+        if isinstance(config.get(key), list):
+            file_sets[key] = config[key]
     references = [
         ref.get("path")
         for ref in config.get("references", []) or []
         if isinstance(ref, dict) and ref.get("path")
     ]
-    return chain, options, references
+    return chain, options, references, file_sets
 
 
 def relative_label(path, root):
@@ -240,11 +265,104 @@ def detect_runner(deps):
     return None
 
 
-def recommended_typecheck(manager, scripts):
+def detect_framework(deps):
+    for framework, marker, checker in FRAMEWORKS:
+        if marker in deps:
+            return {"name": framework, "checker": checker}
+    return None
+
+
+def recommended_typecheck(manager, scripts, framework):
     for name in ("typecheck", "type-check", "check-types"):
         if name in scripts:
             return "{} run {}".format(manager or "npm", name)
-    return EXEC_TSC.get(manager or "npm", "npx tsc") + " --noEmit"
+    prefix = EXEC_PREFIX.get(manager or "npm", "npx")
+    # Plain tsc silently skips .vue/.svelte/.astro files; use the framework checker.
+    if framework:
+        return "{} {}".format(prefix, framework["checker"])
+    return "{} tsc --noEmit".format(prefix)
+
+
+def glob_to_regex(pattern):
+    """Translate a tsconfig include/exclude glob to a regex (approximate)."""
+    pattern = pattern.replace("\\", "/").lstrip("./")
+    last = pattern.rsplit("/", 1)[-1]
+    if "*" not in pattern and "?" not in pattern and "." not in last:
+        pattern = pattern.rstrip("/") + "/**/*"
+    out = []
+    i = 0
+    while i < len(pattern):
+        if pattern[i : i + 2] == "**":
+            out.append(".*")
+            i += 2
+            if i < len(pattern) and pattern[i] == "/":
+                i += 1
+        elif pattern[i] == "*":
+            out.append("[^/]*")
+            i += 1
+        elif pattern[i] == "?":
+            out.append("[^/]")
+            i += 1
+        else:
+            out.append(re.escape(pattern[i]))
+            i += 1
+    return re.compile("^" + "".join(out) + "$")
+
+
+def find_source_files(root, limit=500):
+    found = []
+    for path in sorted(root.rglob("*")):
+        if path.suffix not in SOURCE_SUFFIXES or not path.is_file():
+            continue
+        rel = path.relative_to(root)
+        if any(part in IGNORE_PARTS or part.startswith(".") for part in rel.parts[:-1]):
+            continue
+        if path.name.endswith(".d.ts"):
+            continue
+        found.append(rel.as_posix())
+        if len(found) >= limit:
+            break
+    return found
+
+
+def uncovered_source_files(root, tsconfigs, source_files):
+    """Source files not matched by any tsconfig's files/include (approximate)."""
+    matchers = []
+    for config in tsconfigs:
+        config_dir = (root / config["path"]).parent.resolve()
+        try:
+            base = config_dir.relative_to(root.resolve()).as_posix()
+        except ValueError:
+            continue
+        base = "" if base == "." else base + "/"
+        file_sets = config.get("file_sets", {})
+        explicit = {
+            (base + f.lstrip("./")).replace("//", "/") for f in file_sets.get("files", [])
+        }
+        include = file_sets.get("include")
+        if include is None and "files" not in file_sets:
+            include = ["**/*"]
+        includes = [glob_to_regex(p) for p in include or []]
+        excludes = [glob_to_regex(p) for p in file_sets.get("exclude", [])]
+        matchers.append((base, explicit, includes, excludes))
+    uncovered = []
+    for rel in source_files:
+        covered = False
+        for base, explicit, includes, excludes in matchers:
+            if rel in explicit:
+                covered = True
+                break
+            if base and not rel.startswith(base):
+                continue
+            local = rel[len(base):]
+            if any(rx.match(local) for rx in includes) and not any(
+                rx.match(local) for rx in excludes
+            ):
+                covered = True
+                break
+        if not covered:
+            uncovered.append(rel)
+    return uncovered
 
 
 def inspect(root):
@@ -253,16 +371,23 @@ def inspect(root):
     manager, lockfile = detect_package_manager(root)
     ts_version, ts_source = typescript_version(root, deps)
     scripts = pkg.get("scripts", {}) if isinstance(pkg.get("scripts"), dict) else {}
+    framework = detect_framework(deps)
 
     tsconfigs = []
     for path in find_tsconfigs(root):
-        chain, options, references = load_config_chain(path, root)
+        chain, options, references, file_sets = load_config_chain(path, root)
         tsconfigs.append({
             "path": relative_label(path, root),
             "extends_chain": chain,
             "references": references,
             "flags": effective_flags(options),
+            "file_sets": file_sets,
         })
+
+    if framework and framework["name"] in GENERATED_CONFIG_FRAMEWORKS:
+        uncovered = None  # governed by the framework's generated tsconfig
+    else:
+        uncovered = uncovered_source_files(root, tsconfigs, find_source_files(root))
 
     return {
         "package_manager": manager,
@@ -272,9 +397,11 @@ def inspect(root):
         "module_type": pkg.get("type", "commonjs"),
         "runner": detect_runner(deps),
         "linter": detect_linter(root),
+        "framework": framework,
         "monorepo_markers": detect_monorepo(root, pkg),
         "tsconfigs": tsconfigs,
-        "recommended_typecheck": recommended_typecheck(manager, scripts),
+        "uncovered_files": uncovered,
+        "recommended_typecheck": recommended_typecheck(manager, scripts, framework),
     }
 
 
@@ -293,6 +420,10 @@ def print_human(info):
         print("Linter: {} ({})".format(info["linter"]["name"], info["linter"]["config"]))
     else:
         print("Linter: none detected")
+    if info["framework"]:
+        print("Framework: {} (typecheck via {}; plain tsc skips component files)".format(
+            info["framework"]["name"], info["framework"]["checker"]
+        ))
     print("Monorepo: {}".format(", ".join(info["monorepo_markers"]) or "no"))
     for config in info["tsconfigs"]:
         print()
@@ -305,6 +436,18 @@ def print_human(info):
         set_flags = {k: v for k, v in flags.items() if v is not None}
         print("  effective flags: {}".format(
             ", ".join("{}={}".format(k, json.dumps(v)) for k, v in set_flags.items()) or "none set"
+        ))
+    if info["uncovered_files"]:
+        print()
+        print("Source files not covered by any tsconfig (never type-checked, approximate):")
+        for rel in info["uncovered_files"][:15]:
+            print("  {}".format(rel))
+        if len(info["uncovered_files"]) > 15:
+            print("  ... and {} more".format(len(info["uncovered_files"]) - 15))
+    elif info["uncovered_files"] is None and info["framework"]:
+        print()
+        print("File coverage: governed by {}'s generated tsconfig; not analyzed".format(
+            info["framework"]["name"]
         ))
     print()
     print("Recommended typecheck: {}".format(info["recommended_typecheck"]))
