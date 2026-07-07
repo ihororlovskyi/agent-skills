@@ -1,6 +1,6 @@
 ---
 name: echarts
-description: Use when building, styling, debugging, or optimizing Apache ECharts visualizations in vanilla JavaScript, React, or Vue applications, including chart setup, lifecycle management, responsive resizing, theming, large datasets, streaming updates, and server-side rendering.
+description: Use when building, styling, debugging, or optimizing Apache ECharts visualizations in vanilla JavaScript, React, or Vue applications — chart setup, lifecycle management, responsive resizing, theming, large datasets, streaming updates, server-side rendering (SVG in Node), and symptoms like a blank or empty chart, a chart that does not resize or update, stale series after switching chart types, or "component not exists" errors. Not for choosing chart types or visual design, and not for other charting libraries (D3, Chart.js, Highcharts).
 metadata:
   author: Ihor Orlovskyi
   version: "1.0.0"
