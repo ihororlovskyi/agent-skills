@@ -3,18 +3,19 @@
   "notGrouped": "bottom",
   "groupings": [
     {
-      "title": "Development",
-      "description": "Script-assisted skills for configuring and diagnosing codebases.",
+      "title": "Browser",
+      "description": "Skills for browser-based debugging and visualization.",
       "skills": [
-        "typescript"
+        "web-debug",
+        "echarts"
       ]
     },
     {
-      "title": "Quality Assurance",
-      "description": "Skills for testing and debugging applications.",
+      "title": "JavaScript Tooling",
+      "description": "Skills for configuring, testing, and diagnosing JavaScript/TypeScript codebases.",
       "skills": [
         "vitest",
-        "web-debug"
+        "typescript"
       ]
     }
   ]

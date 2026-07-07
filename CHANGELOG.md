@@ -3,6 +3,27 @@
 Repository-level changelog. Versions here are repository git tags (`vX.Y.Z`);
 individual skill versions live in each skill's `metadata.version`.
 
+## [1.2.0] - 2026-07-07
+
+### Added
+- `echarts` 1.0.0 — build, style, debug, and optimize Apache ECharts
+  visualizations in vanilla JS, React, or Vue; lifecycle management,
+  tree-shaken imports, theming, large-dataset performance, SSR, common
+  failure modes; vanilla/React/Vue reference examples
+
+### Changed
+- `skills.sh.json` groups reorganized: Browser (web-debug, echarts) and
+  JavaScript Tooling (vitest, typescript) instead of Development / Quality
+  Assurance
+- AGENTS.md: mandatory updates of the repository CHANGELOG and skills.sh.json,
+  release/CI notes; a new-skill branch may change existing files if noted in
+  the repository CHANGELOG
+
+## [1.1.1] - 2026-07-07
+
+### Changed
+- `typescript` 1.0.1 — framework checkers, audit mode, script skip criteria
+
 ## [1.1.0] - 2026-07-05
 
 ### Added
