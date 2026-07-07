@@ -4,7 +4,9 @@
 
 This repository is a public collection of agent skills, published on
 [skills.sh](https://skills.sh/sentimony/skills). One directory per skill:
-`skills/<name>/SKILL.md`. The current skill list lives in [README.md](README.md).
+`skills/<name>/` containing `SKILL.md`, `CHANGELOG.md`, `LICENSE`, and optionally
+`examples/`, `scripts/`, `references/`. The current skill list lives in
+[README.md](README.md).
 
 ## Language
 
@@ -26,8 +28,19 @@ code comments, commit messages, and PR descriptions.
 
 - Develop in feature branches, never directly in `main`.
 - Merge pull requests via squash merge only.
+- A branch that adds a new skill may also change previously created files and skills;
+  every such change must be noted in the repository-level [CHANGELOG.md](CHANGELOG.md).
 - When adding, renaming, or substantially updating a skill, update [README.md](README.md)
   and the skill's `CHANGELOG.md` in the same PR.
-- Validate before publishing a release: `gh skill publish --dry-run`.
+- Always update the repository-level [CHANGELOG.md](CHANGELOG.md) in the same PR as
+  well — every release entry there must exist before the corresponding `vX.Y.Z` tag
+  is created.
+- When adding, renaming, or removing a skill, also update [skills.sh.json](skills.sh.json)
+  so the skill appears in the right group on the skills.sh page.
+- Validate before publishing a release: `gh skill publish --dry-run`; publish with
+  `gh skill publish --tag vX.Y.Z` (creates the GitHub Release).
+- CI validates SKILL.md frontmatter (name == directory, description present, plain
+  semver `metadata.version`), compiles Python scripts/examples, and checks for
+  hidden/bidi Unicode.
 - The repository is already picked up by skills.sh; no onboarding steps are needed —
   merged changes to `main` are enough for installs via `npx skills add sentimony/skills`.

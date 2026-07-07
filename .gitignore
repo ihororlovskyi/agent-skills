@@ -2,3 +2,8 @@ Thumbs.db
 .DS_Store
 .idea/
 __pycache__/
+
+.agents/
+.claude/
+.opencode/
+skills-lock.json
