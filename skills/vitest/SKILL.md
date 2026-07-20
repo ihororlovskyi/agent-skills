@@ -3,7 +3,7 @@ name: vitest
 description: You MUST use this when configuring, writing, debugging, running, or migrating Vitest tests in JavaScript/TypeScript projects — Vite, Vue, Nuxt, React, Next.js, Node libraries, workspaces, coverage, mocks, snapshots, flaky tests, and Jest migration.
 metadata:
   author: Ihor Orlovskyi
-  version: "1.0.2"
+  version: "1.0.3"
 license: MIT
 compatibility: Requires Python and a JavaScript package manager; Vitest must be installed in the target project before tests can run.
 ---
@@ -96,6 +96,19 @@ Use Vue Test Utils or the project's existing Testing Library setup. Ensure `jsdo
 ### Nuxt
 Prefer `@nuxt/test-utils` when present. Check whether the project uses `environment: 'nuxt'`, `happy-dom`, `jsdom`, or plain `node`. Do not replace Nuxt-aware tests with plain Vue tests for code that depends on Nuxt auto-imports, runtime config, plugins, routes, Nitro/server APIs, or module setup.
 
+Mixing `node`- and `nuxt`-environment files in one config is normal and works via per-file directives on top of `defineVitestConfig`:
+
+```ts
+// vitest.config.ts
+import { defineVitestConfig } from '@nuxt/test-utils/config'
+export default defineVitestConfig({ test: { environment: 'node' } })
+
+// tests/app/composable.nuxt.test.ts (or a per-file directive)
+// @vitest-environment nuxt
+```
+
+Note that `defineVitestConfig` registers Nuxt auto-imports for the whole Vite worker, so they can leak into `node`-environment files — see Common Failure Modes.
+
 ### Vue / Nuxt Gotchas
 For Pinia-dependent components/composables, use the project's existing Pinia testing setup instead of hand-rolled mocks. For async Vue rendering, await framework utilities such as `nextTick`/`flushPromises` or Testing Library `findBy*` queries; do not sleep. For Suspense, async components, Teleport, plugins, or provide/inject, prefer existing project test helpers before creating new wrappers.
 
@@ -145,6 +158,8 @@ Also check timer behavior, fake timers, snapshots, config differences, setup fil
 - **Timer tests hang**: restore real timers and advance timers explicitly.
 - **ESM/CJS mismatch**: follow the project module type and avoid mixing require/import patterns.
 - **Flaky async tests**: wait for specific state, DOM text, emitted events, or resolved promises.
+- **Nuxt auto-import leak into `node`-environment files**: `ReferenceError: window is not defined` or a `useRuntimeConfig` crash at the collection stage in files that never call `$fetch`/`useRuntimeConfig` themselves, with stack traces pointing at unrelated lines (sourcemap shift from auto-import injection). Cause: `defineVitestConfig` registers Nuxt auto-imports for the whole Vite worker, and they leak into `environment: node` files whenever any `nuxt`-environment file is in the run. Diagnose by grepping the failing file's transitive imports for auto-imported helpers (`$fetch`, `useRuntimeConfig`) — suspect the leak, not the test logic.
+- **Stale `.nuxt` state**: do not delete `.nuxt`/`node_modules/.cache/nuxt` blindly for a "clean" run — it breaks the tests' tsconfig resolution and adds noisy false signals. Regenerate with `npx nuxt prepare`, not a bare `rm -rf`.
 
 ## Reference Examples
 

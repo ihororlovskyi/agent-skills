@@ -3,6 +3,20 @@
 All notable changes to the `vitest` skill. Versions refer to `metadata.version`
 in SKILL.md. This file is for maintainers and is never loaded by agents using the skill.
 
+## [1.0.3] - 2026-07-20
+
+Driven by real-world audit feedback from a Nuxt 4 project (agilecharts) with
+mixed node/nuxt environment test files.
+
+### Added
+- Common Failure Modes: Nuxt auto-import leak into `environment: node` files
+  (`window is not defined` / `useRuntimeConfig` crash at collection, shifted
+  stack traces) — cause, diagnosis via transitive-import grep
+- Common Failure Modes: do not delete `.nuxt`/`node_modules/.cache/nuxt`
+  blindly; regenerate with `nuxt prepare`
+- Nuxt adapter: config example for mixing node- and nuxt-environment files
+  in one `defineVitestConfig`
+
 ## [1.0.2] - 2026-07-19
 
 ### Changed
