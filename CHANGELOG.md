@@ -17,6 +17,10 @@ Feedback-driven guidance updates from real audit sessions on the agilecharts pro
   documented in Common Failure Modes (symptom, cause, diagnosis); `.nuxt`-cache
   warning (`nuxt prepare`, not `rm -rf`); mixed node/nuxt environment config
   example in the Nuxt adapter
+- `web-debug` 1.2.0 → 1.2.1 — cold-start HMR form-reset pitfall in Waiting
+  Strategy; login-then-audit pattern in Best Practices; `console_audit.py`
+  example gains an optional login step over a shared context and is documented
+  as a copy-and-edit template
 
 ## [1.5.0] - 2026-07-19
 
