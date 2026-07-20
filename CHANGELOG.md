@@ -8,6 +8,15 @@ individual skill versions live in each skill's `metadata.version`.
 Feedback-driven guidance updates from real audit sessions on the agilecharts project.
 
 ### Changed
+- `typescript` 1.2.1 → 1.2.2 — audit guidance: "already healthy" early exit,
+  sampling heuristic for massive non-null-assertion counts, generic `defineProps`
+  for `config: any` Vue props; error playbook gains the
+  `ERR_PACKAGE_PATH_NOT_EXPORTED './lib/tsc'` entry; TS-7 migration reference
+  gains a "Choosing the TS-7 target" checklist and a `types: []` vs `lib` note
+- `vitest` 1.0.2 → 1.0.3 — Nuxt auto-import leak into `environment: node` files
+  documented in Common Failure Modes (symptom, cause, diagnosis); `.nuxt`-cache
+  warning (`nuxt prepare`, not `rm -rf`); mixed node/nuxt environment config
+  example in the Nuxt adapter
 - `web-debug` 1.2.0 → 1.2.1 — cold-start HMR form-reset pitfall in Waiting
   Strategy; login-then-audit pattern in Best Practices; `console_audit.py`
   example gains an optional login step over a shared context and is documented
