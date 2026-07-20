@@ -13,6 +13,10 @@ Feedback-driven guidance updates from real audit sessions on the agilecharts pro
   for `config: any` Vue props; error playbook gains the
   `ERR_PACKAGE_PATH_NOT_EXPORTED './lib/tsc'` entry; TS-7 migration reference
   gains a "Choosing the TS-7 target" checklist and a `types: []` vs `lib` note
+- `vitest` 1.0.2 → 1.0.3 — Nuxt auto-import leak into `environment: node` files
+  documented in Common Failure Modes (symptom, cause, diagnosis); `.nuxt`-cache
+  warning (`nuxt prepare`, not `rm -rf`); mixed node/nuxt environment config
+  example in the Nuxt adapter
 
 ## [1.5.0] - 2026-07-19
 
