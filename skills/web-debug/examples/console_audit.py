@@ -6,6 +6,7 @@ from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
 BASE = 'http://localhost:5173'  # Confirm the actual port from server startup logs
 ROUTES = ['/', '/about', '/settings']  # Replace with your routes
+LOGIN = None  # Or e.g. {'path': '/login', 'user': '...', 'password': '...'} for auth-gated apps
 
 NOISE_TYPES = ('log', 'debug', 'info')  # Dev-server noise; signal is warning/error/pageerror
 MAX_LEN = 500  # Truncate verbose framework warnings
@@ -14,10 +15,26 @@ results = {}
 
 with sync_playwright() as p:
     browser = p.chromium.launch(headless=True)
+    # One context for the whole audit so a login session carries across routes
+    context = browser.new_context()
+
+    if LOGIN:
+        page = context.new_page()
+        page.goto(BASE + LOGIN['path'], wait_until='domcontentloaded')
+        # Cold dev-server starts can wipe typed values (HMR reload ~500ms after
+        # load) - wait for render to settle before filling; see SKILL.md
+        page.wait_for_timeout(1500)
+        page.get_by_label('Email').fill(LOGIN['user'])  # Adjust locators to the app
+        page.get_by_label('Password').fill(LOGIN['password'])
+        page.get_by_role('button', name='Log in').click()
+        # After the redirect the form is gone - don't assert input_value() here
+        page.wait_for_url(lambda u: LOGIN['path'] not in u)
+        page.close()
+
     for route in ROUTES:
         msgs = []
         # Fresh page per route so logs don't mix between pages
-        page = browser.new_page()
+        page = context.new_page()
         # Bind msgs via default arg (m=msgs) - a plain closure would late-bind
         # and dump every page's events into the last route's list
         page.on('console', lambda msg, m=msgs: msg.type not in NOISE_TYPES

@@ -3,7 +3,7 @@ name: web-debug
 description: You MUST use this when interacting with or testing local web applications with Playwright — verifying frontend functionality, debugging UI behavior, capturing browser screenshots, or viewing browser console logs.
 metadata:
   author: Ihor Orlovskyi
-  version: "1.2.0"
+  version: "1.2.1"
 license: Apache-2.0
 compatibility: Requires Python and Playwright
 ---
@@ -86,6 +86,11 @@ Write throwaway scripts to your scratchpad/temp directory, not into the user's r
 - **Log collection is the exception**: when the goal is "capture ALL console output" (not "wait
   for an element"), a fixed `page.wait_for_timeout(2000-3000)` after render is legitimate —
   hydration warnings and async errors arrive after `domcontentloaded`.
+- **Cold dev-server start can reset forms**: on the first visit to a freshly started dev
+  server, Vite dependency re-optimization / HMR reloads the component ~500ms after load and
+  wipes freshly typed values (component-local reactive state). Before filling forms, wait for
+  the page's module chunk to settle (a second `framenavigated` / duplicate script fetch), or
+  pre-warm the page (`curl` the URL + a short pause) and only then run the real interaction.
 - **SPA navigation**: `page.goto()` is a hard navigation that aborts all in-flight requests
   (producing `ERR_ABORTED` noise); clicking a router link is a soft navigation. To test SPA
   routing behavior, click links; use `goto` only for the initial load or independent page audits.
@@ -118,6 +123,7 @@ reliable; `requestfailed` and dev-server noise are hints that need confirmation.
 - In i18n apps, print the actual button/link texts before clicking; the active locale changes accessible names
 - Wait for concrete conditions (`page.wait_for_selector()`, `expect(locator)`), not fixed timeouts (except log collection — see Waiting Strategy)
 - Browser actions hit the real backend the dev server is configured for — check which env it uses before create/write flows, and clean up test data
+- Auth-gated apps — login-then-audit: log in once through the real UI (`fill` credentials → submit → `page.wait_for_url(lambda u: '/login' not in u)`), then continue recon in the same context so every page shares the session. After the redirect, do not assert `input_value()` on form fields — they no longer exist on the new page; a "submit didn't work" conclusion drawn from that check is false. See `examples/console_audit.py` for the pattern.
 
 ## Security Model
 
@@ -141,4 +147,4 @@ reliable; `requestfailed` and dev-server noise are hints that need confirmation.
   - `element_discovery.py` - Discovering buttons, links, and inputs on a page
   - `static_html_automation.py` - Using file:// URLs for local HTML
   - `console_logging.py` - Capturing console logs and page errors during automation
-  - `console_audit.py` - Multi-page console audit with dedup, noise filtering, and the late-binding lambda trap
+  - `console_audit.py` - Multi-page console audit with dedup, noise filtering, an optional login-then-audit step, and the late-binding lambda trap. It is a copy-and-edit template, not a CLI: set the URL list and the login block by editing the constants at the top
