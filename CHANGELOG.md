@@ -3,6 +3,16 @@
 Repository-level changelog. Versions here are repository git tags (`vX.Y.Z`);
 individual skill versions live in each skill's `metadata.version`.
 
+## [1.6.0] - 2026-07-20
+
+Feedback-driven guidance updates from real audit sessions on the agilecharts project.
+
+### Changed
+- `vitest` 1.0.2 → 1.0.3 — Nuxt auto-import leak into `environment: node` files
+  documented in Common Failure Modes (symptom, cause, diagnosis); `.nuxt`-cache
+  warning (`nuxt prepare`, not `rm -rf`); mixed node/nuxt environment config
+  example in the Nuxt adapter
+
 ## [1.5.0] - 2026-07-19
 
 ### Changed
